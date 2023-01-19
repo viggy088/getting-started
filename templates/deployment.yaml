@@ -1,0 +1,107 @@
+---
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: todo-mysql-data
+  labels:
+    pv: mysql-volumes
+spec:
+  capacity:
+   storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+   - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Recycle
+  hostPath:
+    path: "/opt/volumes"
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: claim-mysql
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  selector:
+    matchLabels:
+      pv: mysql-volumes
+  storageClassName: hostpath
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: getting-started
+  labels:
+    app: gs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gs
+  template:
+    metadata:
+      labels:
+        app: gs
+    spec:
+      containers:
+      - image: vignesh088/gst
+        name: gs
+        ports:
+        - containerPort: 3000
+        command:
+        - sh
+        - -c
+        - "cd app && yarn install && yarn run dev"
+        env:
+        - name: MYSQL_HOST
+          value: mysql
+        - name: MYSQL_USER
+          value: root
+        - name: MYSQL_PASSWORD
+          value: secret
+        - name: MYSQL_DB
+          value: todos
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+  labels:
+    app: mysql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:8.0
+        ports:
+        - containerPort: 3306
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: secret
+        - name: MYSQL_DATABASE
+          value: todos
+        volumeMounts:
+        - mountPath: /var/lib/mysql
+          name: todo-mysql-data
+      volumes:
+      - name: todo-mysql-data
+#        hostPath:
+#          path: /opt
+        persistentVolumeClaim:
+          claimName: claim-mysql
